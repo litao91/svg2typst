@@ -37,6 +37,8 @@ struct SvgStyle {
     pub fill: Option<String>,
     pub stroke_width: Option<f64>,
     pub stroke: Option<String>,
+    pub font_family: Option<String>,
+    pub font_size: Option<f64>,
 }
 
 impl FromStr for SvgStyle {
@@ -55,6 +57,14 @@ impl FromStr for SvgStyle {
                     r.stroke_width = Some(f64::from_str(&value[..value.len() - 2])?);
                 } else if key == "stroke" {
                     r.stroke = Some(value.to_string());
+                } else if key == "font-family" {
+                    r.font_family = Some(value.to_string());
+                } else if key == "font-size" {
+                    if value.ends_with("px") {
+                        r.font_size = Some(f64::from_str(&value[..value.len() - 2])?);
+                    } else {
+                        r.font_size = Some(f64::from_str(&value)?);
+                    }
                 } else {
                     debug!("Unprocessed style: {}", kv_str);
                 }
@@ -66,11 +76,16 @@ impl FromStr for SvgStyle {
     }
 }
 
-fn handle_event(event: Event, reader: &mut Reader<&[u8]>, transform: &Transform) -> Result<()> {
+fn handle_event(
+    event: Event,
+    reader: &mut Reader<&[u8]>,
+    transform: &Transform,
+    font_scale: f64,
+) -> Result<()> {
+    let mut event_buf = Vec::new();
     match event {
         Event::Start(element) => {
             if element.name().as_ref() == b"g" {
-                let mut event_buf = Vec::new();
                 for attr_result in element.attributes() {
                     let a = attr_result?;
                     let mut cur_transform = transform.clone();
@@ -98,13 +113,105 @@ fn handle_event(event: Event, reader: &mut Reader<&[u8]>, transform: &Transform)
                             debug!("End of g :{:?}", sub_event);
                             break;
                         }
-                        handle_event(sub_event, reader, &cur_transform)?;
+                        handle_event(sub_event, reader, &cur_transform, font_scale)?;
                     }
                 }
+            } else if element.name().as_ref() == b"text" {
+                let mut x = 0.0;
+                let mut y = 0.0;
+                let mut style = None;
+                for attr in element.attributes() {
+                    let a = attr?;
+                    let val_cow = a.decode_and_unescape_value(reader.decoder())?;
+                    let val_str = val_cow.as_ref();
+                    match a.key.as_ref() {
+                        b"x" => {
+                            x = if val_str.ends_with("px") {
+                                f64::from_str(&val_str[0..val_str.len() - 2])?
+                            } else {
+                                f64::from_str(val_str)?
+                            };
+                        }
+                        b"y" => {
+                            y = if val_str.ends_with("px") {
+                                f64::from_str(&val_str[0..val_str.len() - 2])?
+                            } else {
+                                f64::from_str(val_str)?
+                            };
+                        }
+                        b"style" => {
+                            style = Some(SvgStyle::from_str(val_str)?);
+                        }
+                        _ => debug!(
+                            "Unprocessed attributes for <text> {}",
+                            str::from_utf8(a.key.as_ref())?
+                        ),
+                    }
+                }
+                let mut text_content = String::new();
+                let mut num_text_end_expected = 1;
+                loop {
+                    let evt = reader.read_event_into(&mut event_buf)?;
+                    if let Event::End(element) = &evt
+                        && element.name().as_ref() == b"text"
+                    {
+                        num_text_end_expected -= 1;
+                        if num_text_end_expected == 0 {
+                            break;
+                        }
+                    }
+                    if let Event::Text(content) = &evt {
+                        text_content.push_str(str::from_utf8(content.as_ref())?);
+                    }
+                }
+                debug!(
+                    "text --- x = {}, y = {}, style = {:?}, content = {}",
+                    x, y, style, text_content
+                );
+                let (x1, y1) = apply_transform((x, y), transform);
+                print!("content(({},{}), ", x1, y1);
+                print!("anchor: \"south-west\",");
+                if let Some(style) = style {
+                    print!("text(");
+                    if let Some(font_size) = style.font_size {
+                        print!("size: {}pt, ", font_size * font_scale);
+                    }
+                    if let Some(font_family) = style.font_family {
+                        print!(
+                            "font: ({}, ), ",
+                            font_family.replace("'", "\"").replace(", monospace", "")
+                        );
+                    }
+                    if let Some(fill) = style.fill
+                        && fill != "none"
+                    {
+                        print!("fill: {}, ", fill);
+                    }
+                    print!(")")
+                }
+                print!(
+                    "[{}]",
+                    text_content
+                        .replace("$", "\\$")
+                        .replace("[", "\\[")
+                        .replace("]", "\\]")
+                        .replace("/", "\\/")
+                );
+
+                print!(")\n");
+            } else {
+                debug!(
+                    "Unprocessed Event::Start {}",
+                    str::from_utf8(element.name().as_ref())?
+                );
             }
 
             Ok(())
         }
+        // Event::Text(text_element) => {
+        //     debug!("Text {:?}", text_element);
+        //     Ok(())
+        // }
         Event::Empty(element) => {
             match element.name().as_ref() {
                 b"rect" => {
@@ -222,13 +329,14 @@ fn handle_event(event: Event, reader: &mut Reader<&[u8]>, transform: &Transform)
     }
 }
 
-fn convert(reader: &mut Reader<&[u8]>, transform: &Transform) -> Result<()> {
+fn convert(reader: &mut Reader<&[u8]>, transform: &Transform, font_scale: f64) -> Result<()> {
+    let mut buf = Vec::new();
     loop {
-        let event = reader.read_event()?;
+        let event = reader.read_event_into(&mut buf)?;
         if event == Event::Eof {
             break;
         } else {
-            handle_event(event, reader, transform)?;
+            handle_event(event, reader, transform, font_scale)?;
         }
     }
     Ok(())
@@ -240,5 +348,9 @@ fn main() -> Result<()> {
     io::stdin().read_to_string(&mut input)?;
     let mut reader = Reader::from_str(&input);
     reader.config_mut().trim_text(true);
-    convert(&mut reader, &Transform::new(0.01, 0.0, 0.0, 0.01, 0.0, 0.0))
+    convert(
+        &mut reader,
+        &Transform::new(0.01, 0.0, 0.0, -0.01, 0.0, 0.0),
+        0.2,
+    )
 }
