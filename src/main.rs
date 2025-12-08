@@ -40,6 +40,7 @@ struct SvgStyle {
     pub stroke: Option<String>,
     pub font_family: Option<String>,
     pub font_size: Option<f64>,
+    pub dash_array: Option<String>,
 }
 
 impl FromStr for SvgStyle {
@@ -68,6 +69,8 @@ impl FromStr for SvgStyle {
                     } else {
                         r.font_size = Some(f64::from_str(&value)?);
                     }
+                } else if key == "stroke-dasharray" {
+                    r.dash_array = Some(value.to_string());
                 } else {
                     debug!("Unprocessed style: {}", kv_str);
                 }
@@ -294,10 +297,26 @@ fn handle_event(
                     if let Some(segments) = &path_segments {
                         let mut last_point = (0.0, 0.0);
                         print!("merge-path(");
-                        if let Some(style) = &style
-                            && let Some(fill) = &style.fill
-                        {
-                            print!("fill: {}, ", fill);
+                        if let Some(style) = &style {
+                            if let Some(fill) = &style.fill {
+                                print!("fill: {}, ", fill);
+                            }
+                            if style.stroke.is_some()
+                                || style.stroke_width.is_some()
+                                || style.dash_array.is_some()
+                            {
+                                print!("stroke: (");
+                                if let Some(stroke) = &style.stroke {
+                                    print!("paint: {}, ", stroke);
+                                }
+                                if let Some(thickness) = style.stroke_width {
+                                    print!("thickness: {}pt,", thickness);
+                                }
+                                if style.dash_array.is_some() {
+                                    print!("dash: \"dashed\",")
+                                }
+                                print!("),");
+                            }
                         }
                         print!("{{\n");
                         for s in segments {
@@ -318,7 +337,7 @@ fn handle_event(
                                                 print!("paint: {}, ", stroke);
                                             }
                                             if let Some(thickness) = style.stroke_width {
-                                                print!("thickness: {},", thickness);
+                                                print!("thickness: {}pt,", thickness);
                                             }
                                             print!("),");
                                         }
@@ -348,7 +367,7 @@ fn handle_event(
                                                 print!("paint: {}, ", stroke);
                                             }
                                             if let Some(thickness) = style.stroke_width {
-                                                print!("thickness: {},", thickness);
+                                                print!("thickness: {}pt,", thickness);
                                             }
                                             print!("),");
                                         }
@@ -397,6 +416,6 @@ fn main() -> Result<()> {
     convert(
         &mut reader,
         &Transform::new(0.01, 0.0, 0.0, -0.01, 0.0, 0.0),
-        0.2,
+        0.25,
     )
 }
