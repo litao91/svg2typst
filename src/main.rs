@@ -1,5 +1,5 @@
+use log::debug;
 use std::{
-    borrow::Cow,
     io::{self, Read},
     str::FromStr,
 };
@@ -56,7 +56,7 @@ impl FromStr for SvgStyle {
                 } else if key == "stroke" {
                     r.stroke = Some(value.to_string());
                 } else {
-                    println!("Unprocessed style: {}", kv_str);
+                    debug!("Unprocessed style: {}", kv_str);
                 }
             } else if !kv_str.is_empty() {
                 return Err(anyhow::anyhow!("unexpected format {}", kv_str));
@@ -77,15 +77,15 @@ fn handle_event(event: Event, reader: &mut Reader<&[u8]>, transform: &Transform)
                     match a.key.as_ref() {
                         b"transform" => {
                             let transform_str = a.decode_and_unescape_value(reader.decoder())?;
-                            println!("transform_str: {}", transform_str);
+                            debug!("transform_str: {}", transform_str);
                             cur_transform = transform_multiply(
                                 &cur_transform,
                                 &Transform::from_str(transform_str.as_ref())?,
                             );
-                            println!("cur_transform {:?}", cur_transform);
+                            debug!("cur_transform {:?}", cur_transform);
                             // handle_event(sub_event, reader, &cur_transform)?;
                         }
-                        _ => println!(
+                        _ => debug!(
                             "Unprocessed attr for <g> {}",
                             str::from_utf8(a.key.as_ref())?
                         ),
@@ -95,7 +95,7 @@ fn handle_event(event: Event, reader: &mut Reader<&[u8]>, transform: &Transform)
                         if let Event::End(ref e) = sub_event
                             && e.name().as_ref() == b"g"
                         {
-                            println!("End of g :{:?}", sub_event);
+                            debug!("End of g :{:?}", sub_event);
                             break;
                         }
                         handle_event(sub_event, reader, &cur_transform)?;
@@ -133,7 +133,7 @@ fn handle_event(event: Event, reader: &mut Reader<&[u8]>, transform: &Transform)
                             b"style" => {
                                 style = SvgStyle::from_str(val_str)?;
                             }
-                            _ => println!(
+                            _ => debug!(
                                 "Unprocessed attributes for <rect> {}",
                                 str::from_utf8(a.key.as_ref())?
                             ),
@@ -176,12 +176,19 @@ fn handle_event(event: Event, reader: &mut Reader<&[u8]>, transform: &Transform)
                                 style = Some(SvgStyle::from_str(val_str.as_ref())?);
                             }
                             _ => {
-                                println!("unprocessed attr {:?}", a);
+                                debug!("unprocessed attr {:?}", a);
                             }
                         }
                     }
-                    println!("d={:?}, style={:?}", path_segments, style);
+                    debug!("d={:?}, style={:?}", path_segments, style);
                     if let Some(segments) = path_segments {
+                        let mut has_merge_path = false;
+                        if let Some(style) = &style
+                            && let Some(fill) = &style.fill
+                        {
+                            println!("merge-path(fill: {}, {{", fill);
+                            has_merge_path = true;
+                        }
                         let points: Vec<(f64, f64)> = segments
                             .iter()
                             .map(|i| match i {
@@ -198,15 +205,18 @@ fn handle_event(event: Event, reader: &mut Reader<&[u8]>, transform: &Transform)
                             print!("({}, {}),", x, y);
                         }
                         print!(")\n");
+                        if has_merge_path {
+                            println!("}})");
+                        }
                     }
                 }
-                _ => println!("Unprocessed element: {:?}", element),
+                _ => debug!("Unprocessed element: {:?}", element),
             }
             Ok(())
         }
         Event::Eof => Ok(()),
         _ => {
-            println!("Unhandled event: {:?}", event);
+            debug!("Unhandled event: {:?}", event);
             Ok(())
         }
     }
@@ -225,6 +235,7 @@ fn convert(reader: &mut Reader<&[u8]>, transform: &Transform) -> Result<()> {
 }
 
 fn main() -> Result<()> {
+    env_logger::init();
     let mut input = String::new();
     io::stdin().read_to_string(&mut input)?;
     let mut reader = Reader::from_str(&input);
