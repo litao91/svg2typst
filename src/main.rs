@@ -35,6 +35,7 @@ fn apply_transform(coord: (f64, f64), t: &Transform) -> (f64, f64) {
 #[derive(Debug, Default)]
 struct SvgStyle {
     pub fill: Option<String>,
+    pub fill_rule: Option<String>,
     pub stroke_width: Option<f64>,
     pub stroke: Option<String>,
     pub font_family: Option<String>,
@@ -53,6 +54,8 @@ impl FromStr for SvgStyle {
             {
                 if key == "fill" {
                     r.fill = Some(value.to_string());
+                } else if key == "fill-rule" {
+                    r.fill_rule = Some(value.to_string());
                 } else if key == "stroke-width" {
                     r.stroke_width = Some(f64::from_str(&value[..value.len() - 2])?);
                 } else if key == "stroke" {
@@ -288,33 +291,76 @@ fn handle_event(
                         }
                     }
                     debug!("d={:?}, style={:?}", path_segments, style);
-                    if let Some(segments) = path_segments {
-                        let mut has_merge_path = false;
+                    if let Some(segments) = &path_segments {
+                        let mut last_point = (0.0, 0.0);
+                        print!("merge-path(");
                         if let Some(style) = &style
                             && let Some(fill) = &style.fill
                         {
-                            println!("merge-path(fill: {}, {{", fill);
-                            has_merge_path = true;
+                            print!("fill: {}, ", fill);
                         }
-                        let points: Vec<(f64, f64)> = segments
-                            .iter()
-                            .map(|i| match i {
-                                svgtypes::SimplePathSegment::MoveTo { x, y } => (*x, *y),
-                                svgtypes::SimplePathSegment::LineTo { x, y } => (*x, *y),
-                                _ => {
-                                    unimplemented!()
+                        print!("{{\n");
+                        for s in segments {
+                            match s {
+                                svgtypes::SimplePathSegment::MoveTo { x, y } => {
+                                    last_point = apply_transform((*x, *y), transform);
                                 }
-                            })
-                            .collect();
-                        print!("line(");
-                        for p in points {
-                            let (x, y) = apply_transform(p, transform);
-                            print!("({}, {}),", x, y);
+                                svgtypes::SimplePathSegment::LineTo { x, y } => {
+                                    let (x, y) = apply_transform((*x, *y), transform);
+                                    print!(
+                                        "line(({}, {}), ({}, {}),",
+                                        last_point.0, last_point.1, x, y
+                                    );
+                                    if let Some(style) = &style {
+                                        if style.stroke.is_some() || style.stroke_width.is_some() {
+                                            print!("stroke: (");
+                                            if let Some(stroke) = &style.stroke {
+                                                print!("paint: {}, ", stroke);
+                                            }
+                                            if let Some(thickness) = style.stroke_width {
+                                                print!("thickness: {},", thickness);
+                                            }
+                                            print!("),");
+                                        }
+                                    }
+                                    print!(")\n");
+                                    last_point = (x, y);
+                                }
+                                svgtypes::SimplePathSegment::CurveTo {
+                                    x1,
+                                    y1,
+                                    x2,
+                                    y2,
+                                    x,
+                                    y,
+                                } => {
+                                    let (x1, y1) = apply_transform((*x1, *y1), transform);
+                                    let (x2, y2) = apply_transform((*x2, *y2), transform);
+                                    let (x, y) = apply_transform((*x, *y), transform);
+                                    print!(
+                                        "bezier(({}, {}), ({}, {}), ({}, {}), ({}, {}),",
+                                        last_point.0, last_point.1, x, y, x1, y1, x2, y2,
+                                    );
+                                    if let Some(style) = &style {
+                                        if style.stroke.is_some() || style.stroke_width.is_some() {
+                                            print!("stroke: (");
+                                            if let Some(stroke) = &style.stroke {
+                                                print!("paint: {}, ", stroke);
+                                            }
+                                            if let Some(thickness) = style.stroke_width {
+                                                print!("thickness: {},", thickness);
+                                            }
+                                            print!("),");
+                                        }
+                                    }
+                                    print!(")\n");
+                                    last_point = (x, y);
+                                }
+                                svgtypes::SimplePathSegment::ClosePath => {}
+                                _ => todo!(),
+                            }
                         }
-                        print!(")\n");
-                        if has_merge_path {
-                            println!("}})");
-                        }
+                        println!("}})");
                     }
                 }
                 _ => debug!("Unprocessed element: {:?}", element),
