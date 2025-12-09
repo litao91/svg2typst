@@ -43,6 +43,29 @@ struct SvgStyle {
     pub dash_array: Option<String>,
 }
 
+impl SvgStyle {
+    pub fn format_fill(&self) {
+        if let Some(fill) = &self.fill {
+            print!("fill: {}, ", fill);
+        }
+    }
+    pub fn format_stroke(&self) {
+        if self.stroke.is_some() || self.stroke_width.is_some() || self.dash_array.is_some() {
+            print!("stroke: (");
+            if let Some(stroke) = &self.stroke {
+                print!("paint: {}, ", stroke);
+            }
+            if let Some(thickness) = self.stroke_width {
+                print!("thickness: {}pt,", thickness);
+            }
+            if self.dash_array.is_some() {
+                print!("dash: \"dashed\",")
+            }
+            print!("),");
+        }
+    }
+}
+
 impl FromStr for SvgStyle {
     type Err = anyhow::Error;
 
@@ -296,29 +319,17 @@ fn handle_event(
                     debug!("d={:?}, style={:?}", path_segments, style);
                     if let Some(segments) = &path_segments {
                         let mut last_point = (0.0, 0.0);
-                        print!("merge-path(");
-                        if let Some(style) = &style {
-                            if let Some(fill) = &style.fill {
-                                print!("fill: {}, ", fill);
-                            }
-                            if style.stroke.is_some()
-                                || style.stroke_width.is_some()
-                                || style.dash_array.is_some()
-                            {
-                                print!("stroke: (");
-                                if let Some(stroke) = &style.stroke {
-                                    print!("paint: {}, ", stroke);
-                                }
-                                if let Some(thickness) = style.stroke_width {
-                                    print!("thickness: {}pt,", thickness);
-                                }
-                                if style.dash_array.is_some() {
-                                    print!("dash: \"dashed\",")
-                                }
-                                print!("),");
-                            }
+                        let mut merge_path = false;
+                        if let Some(style) = &style
+                            && let Some(fill) = &style.fill
+                            && fill != "none"
+                        {
+                            merge_path = true;
+                            print!("merge-path(");
+                            style.format_fill();
+                            style.format_stroke();
+                            print!("{{\n");
                         }
-                        print!("{{\n");
                         for s in segments {
                             match s {
                                 svgtypes::SimplePathSegment::MoveTo { x, y } => {
@@ -331,16 +342,7 @@ fn handle_event(
                                         last_point.0, last_point.1, x, y
                                     );
                                     if let Some(style) = &style {
-                                        if style.stroke.is_some() || style.stroke_width.is_some() {
-                                            print!("stroke: (");
-                                            if let Some(stroke) = &style.stroke {
-                                                print!("paint: {}, ", stroke);
-                                            }
-                                            if let Some(thickness) = style.stroke_width {
-                                                print!("thickness: {}pt,", thickness);
-                                            }
-                                            print!("),");
-                                        }
+                                        style.format_stroke();
                                     }
                                     print!(")\n");
                                     last_point = (x, y);
@@ -361,16 +363,7 @@ fn handle_event(
                                         last_point.0, last_point.1, x, y, x1, y1, x2, y2,
                                     );
                                     if let Some(style) = &style {
-                                        if style.stroke.is_some() || style.stroke_width.is_some() {
-                                            print!("stroke: (");
-                                            if let Some(stroke) = &style.stroke {
-                                                print!("paint: {}, ", stroke);
-                                            }
-                                            if let Some(thickness) = style.stroke_width {
-                                                print!("thickness: {}pt,", thickness);
-                                            }
-                                            print!("),");
-                                        }
+                                        style.format_stroke();
                                     }
                                     print!(")\n");
                                     last_point = (x, y);
@@ -379,7 +372,9 @@ fn handle_event(
                                 _ => todo!(),
                             }
                         }
-                        println!("}})");
+                        if merge_path {
+                            println!("}})");
+                        }
                     }
                 }
                 _ => debug!("Unprocessed element: {:?}", element),
