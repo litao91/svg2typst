@@ -62,6 +62,8 @@ impl SvgStyle {
                 print!("dash: \"dashed\",")
             }
             print!("),");
+        } else {
+            print!("stroke: none, ")
         }
     }
 }
@@ -278,19 +280,8 @@ fn handle_event(
                     let (x1, y1) = apply_transform((x, y), transform);
                     let (x2, y2) = apply_transform((x + width, y + height), transform);
                     print!("rect(({}, {}), ({}, {}), ", x1, y1, x2, y2);
-                    if let Some(fill) = &style.fill {
-                        print!("fill: {},", fill);
-                    }
-                    if style.stroke.is_some() || style.stroke_width.is_some() {
-                        print!("stroke: (");
-                        if let Some(stroke) = &style.stroke {
-                            print!("paint: {},", stroke);
-                        }
-                        if let Some(width) = &style.stroke_width {
-                            print!("thickness: {}pt, ", width);
-                        }
-                        print!("),");
-                    }
+                    style.format_fill();
+                    style.format_stroke();
                     print!(")\n");
                 }
                 b"path" => {
@@ -377,6 +368,92 @@ fn handle_event(
                         }
                     }
                 }
+                b"ellipse" => {
+                    let mut cx = 0.0;
+                    let mut cy = 0.0;
+                    let mut rx = 0.0;
+                    let mut ry = 0.0;
+                    let mut style = Default::default();
+                    for attr in element.attributes() {
+                        let a = attr?;
+                        let val_cow = a.decode_and_unescape_value(reader.decoder())?;
+                        let val_str = val_cow.as_ref();
+                        match a.key.as_ref() {
+                            b"cx" => {
+                                cx = f64::from_str(val_str)?;
+                            }
+                            b"cy" => {
+                                cy = f64::from_str(val_str)?;
+                            }
+                            b"rx" => {
+                                rx = f64::from_str(val_str)?;
+                            }
+                            b"ry" => {
+                                ry = f64::from_str(val_str)?;
+                            }
+                            b"style" => {
+                                style = Some(SvgStyle::from_str(val_str)?);
+                            }
+                            _ => debug!(
+                                "Unprocessed attributes for <rect> {}",
+                                str::from_utf8(a.key.as_ref())?
+                            ),
+                        }
+                    }
+                    // println!("{:?}", transform);
+                    let (cx1, cy1) = apply_transform((cx, cy), transform);
+                    let (rx1, ry1) = apply_transform((cx + rx, cy + ry), transform);
+                    print!(
+                        "circle(({}, {}), radius: ({}, {}), ",
+                        cx1,
+                        cy1,
+                        rx1 - cx1,
+                        ry1 - cy1,
+                    );
+                    if let Some(style) = &style {
+                        style.format_fill();
+                        style.format_stroke();
+                    }
+                    print!(")\n")
+                }
+                b"circle" => {
+                    let mut cx = 0.0;
+                    let mut cy = 0.0;
+                    let mut r = 0.0;
+                    let mut style = Default::default();
+                    for attr in element.attributes() {
+                        let a = attr?;
+                        let val_cow = a.decode_and_unescape_value(reader.decoder())?;
+                        let val_str = val_cow.as_ref();
+                        match a.key.as_ref() {
+                            b"cx" => {
+                                cx = f64::from_str(val_str)?;
+                            }
+                            b"cy" => {
+                                cy = f64::from_str(val_str)?;
+                            }
+                            b"r" => {
+                                r = f64::from_str(val_str)?;
+                            }
+                            b"style" => {
+                                style = Some(SvgStyle::from_str(val_str)?);
+                            }
+                            _ => debug!(
+                                "Unprocessed attributes for <rect> {}",
+                                str::from_utf8(a.key.as_ref())?
+                            ),
+                        }
+                    }
+                    // println!("{:?}", transform);
+                    let (cx1, cy1) = apply_transform((cx, cy), transform);
+                    let (rx1, _) = apply_transform((cx + r, cy + r), transform);
+                    print!("circle(({}, {}), radius: {}, ", cx1, cy1, rx1 - cx1,);
+                    if let Some(style) = &style {
+                        style.format_fill();
+                        style.format_stroke();
+                    }
+                    print!(")\n")
+                }
                 _ => debug!("Unprocessed element: {:?}", element),
             }
             Ok(())
@@ -411,6 +488,7 @@ fn main() -> Result<()> {
     convert(
         &mut reader,
         &Transform::new(0.01, 0.0, 0.0, -0.01, 0.0, 0.0),
-        0.25,
+        // &Transform::default(),
+        0.27,
     )
 }
