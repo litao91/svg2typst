@@ -355,6 +355,9 @@ fn handle_event(
                             if positions.len() > 1 {
                                 for (ch, pos) in text_content.as_ref().iter().zip(positions.iter())
                                 {
+                                    if *ch == b' ' {
+                                        continue;
+                                    }
                                     gen_content(
                                         apply_transform(
                                             pos.clone(),
