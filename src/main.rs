@@ -107,6 +107,39 @@ impl FromStr for SvgStyle {
     }
 }
 
+fn gen_content(x1: f64, y1: f64, style: &Option<SvgStyle>, text_content: &str, font_scale: f64) {
+    print!("content(({},{}), ", x1, y1);
+    print!("anchor: \"south-west\",");
+    if let Some(style) = style {
+        print!("text(");
+        if let Some(font_size) = style.font_size {
+            print!("size: {}pt, ", font_size * font_scale);
+        }
+        if let Some(font_family) = &style.font_family {
+            print!(
+                "font: ({}, ), ",
+                font_family.replace("'", "\"").replace(", monospace", "")
+            );
+        }
+        if let Some(fill) = &style.fill
+            && fill != "none"
+        {
+            print!("fill: {}, ", fill);
+        }
+        print!(")")
+    }
+    print!(
+        "[{}]",
+        text_content
+            .replace("$", "\\$")
+            .replace("[", "\\[")
+            .replace("]", "\\]")
+            .replace("/", "\\/")
+    );
+
+    print!(")\n");
+}
+
 fn handle_event(
     event: Event,
     reader: &mut Reader<&[u8]>,
@@ -191,6 +224,7 @@ fn handle_event(
                             break;
                         }
                     }
+                    // println!("---- {:?}", evt);
                     if let Event::Text(content) = &evt {
                         text_content.push_str(str::from_utf8(content.as_ref())?);
                     }
@@ -200,36 +234,7 @@ fn handle_event(
                     x, y, style, text_content
                 );
                 let (x1, y1) = apply_transform((x, y), transform);
-                print!("content(({},{}), ", x1, y1);
-                print!("anchor: \"south-west\",");
-                if let Some(style) = style {
-                    print!("text(");
-                    if let Some(font_size) = style.font_size {
-                        print!("size: {}pt, ", font_size * font_scale);
-                    }
-                    if let Some(font_family) = style.font_family {
-                        print!(
-                            "font: ({}, ), ",
-                            font_family.replace("'", "\"").replace(", monospace", "")
-                        );
-                    }
-                    if let Some(fill) = style.fill
-                        && fill != "none"
-                    {
-                        print!("fill: {}, ", fill);
-                    }
-                    print!(")")
-                }
-                print!(
-                    "[{}]",
-                    text_content
-                        .replace("$", "\\$")
-                        .replace("[", "\\[")
-                        .replace("]", "\\]")
-                        .replace("/", "\\/")
-                );
-
-                print!(")\n");
+                gen_content(x1, y1, &style, &text_content, font_scale);
             } else {
                 debug!(
                     "Unprocessed Event::Start {}",
