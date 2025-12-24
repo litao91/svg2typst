@@ -109,12 +109,12 @@ impl FromStr for SvgStyle {
 
 fn gen_content(pos: (f64, f64), style: &Option<SvgStyle>, text_content: &str, font_scale: f64) {
     let (x1, y1) = pos;
-    print!("content(({},{}), ", x1, y1);
+    print!("content(({:.3},{:.3}), ", x1, y1);
     print!("anchor: \"south-west\",");
     if let Some(style) = style {
         print!("text(");
         if let Some(font_size) = style.font_size {
-            print!("size: {}pt, ", font_size * font_scale);
+            print!("size: {:.3}pt, ", font_size * font_scale);
         }
         if let Some(font_family) = &style.font_family {
             print!(
@@ -427,7 +427,7 @@ fn handle_event(
                         }
                         let (x1, y1) = apply_transform((x, y), &parent.transform);
                         let (x2, y2) = apply_transform((x + width, y + height), &parent.transform);
-                        print!("rect(({}, {}), ({}, {}), ", x1, y1, x2, y2);
+                        print!("rect(({:.3}, {:.3}), ({:.3}, {:.3}), ", x1, y1, x2, y2);
                         style.format_fill();
                         style.format_stroke();
                         print!(")\n");
@@ -477,7 +477,7 @@ fn handle_event(
                                     svgtypes::SimplePathSegment::LineTo { x, y } => {
                                         let (x, y) = apply_transform((*x, *y), &parent.transform);
                                         print!(
-                                            "line(({}, {}), ({}, {}),",
+                                            "line(({:.3}, {:.3}), ({:.3}, {:.3}),",
                                             last_point.0, last_point.1, x, y
                                         );
                                         if let Some(style) = &style {
@@ -500,7 +500,7 @@ fn handle_event(
                                             apply_transform((*x2, *y2), &parent.transform);
                                         let (x, y) = apply_transform((*x, *y), &parent.transform);
                                         print!(
-                                            "bezier(({}, {}), ({}, {}), ({}, {}), ({}, {}),",
+                                            "bezier(({:.3}, {:.3}), ({:.3}, {:.3}), ({:.3}, {:.3}), ({:.3}, {:.3}),",
                                             last_point.0, last_point.1, x, y, x1, y1, x2, y2,
                                         );
                                         if let Some(style) = &style {
@@ -554,7 +554,7 @@ fn handle_event(
                         let (cx1, cy1) = apply_transform((cx, cy), &parent.transform);
                         let (rx1, ry1) = apply_transform((cx + rx, cy + ry), &parent.transform);
                         print!(
-                            "circle(({}, {}), radius: ({}, {}), ",
+                            "circle(({:.3}, {:.3}), radius: ({:.3}, {:.3}), ",
                             cx1,
                             cy1,
                             rx1 - cx1,
@@ -597,7 +597,7 @@ fn handle_event(
                         // println!("{:?}", transform);
                         let (cx1, cy1) = apply_transform((cx, cy), &parent.transform);
                         let (rx1, _) = apply_transform((cx + r, cy + r), &parent.transform);
-                        print!("circle(({}, {}), radius: {}, ", cx1, cy1, rx1 - cx1,);
+                        print!("circle(({:.3}, {:.3}), radius: {}, ", cx1, cy1, rx1 - cx1,);
                         if let Some(style) = &style {
                             style.format_fill();
                             style.format_stroke();
