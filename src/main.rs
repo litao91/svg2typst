@@ -15,8 +15,11 @@ use svgtypes::{SimplifyingPathParser, Transform};
 #[derive(Parser, Debug)]
 #[command(version, about, long_about = None)]
 struct Args {
-    #[arg(short, long)]
-    input: String,
+    #[arg(short, long, default_value_t = 0.01)]
+    scale: f64,
+
+    #[arg(short, long, default_value_t = 0.27)]
+    font_scale: f64,
 }
 
 fn transform_multiply(ts1: &Transform, ts2: &Transform) -> Transform {
@@ -388,6 +391,7 @@ fn process_element(
             }
             debug!("d={:?}, style={:?}", path_segments, style);
             if let Some(segments) = &path_segments {
+                let mut unclosed_point = None;
                 let mut last_point = (0.0, 0.0);
                 let mut merge_path = false;
                 let mut is_first_move_to = true;
@@ -410,6 +414,7 @@ fn process_element(
                                 print!("{{\n");
                             }
                             last_point = apply_transform((*x, *y), &parent.transform);
+                            unclosed_point.get_or_insert(last_point);
                         }
                         svgtypes::SimplePathSegment::LineTo { x, y } => {
                             let (x, y) = apply_transform((*x, *y), &parent.transform);
@@ -422,6 +427,7 @@ fn process_element(
                             }
                             print!(")\n");
                             last_point = (x, y);
+                            unclosed_point.get_or_insert(last_point);
                         }
                         svgtypes::SimplePathSegment::CurveTo {
                             x1,
@@ -443,8 +449,21 @@ fn process_element(
                             }
                             print!(")\n");
                             last_point = (x, y);
+                            unclosed_point.get_or_insert(last_point);
                         }
-                        svgtypes::SimplePathSegment::ClosePath => {}
+                        svgtypes::SimplePathSegment::ClosePath => {
+                            if let Some((x, y)) = unclosed_point {
+                                print!(
+                                    "line(({:.3}, {:.3}), ({:.3}, {:.3}),",
+                                    last_point.0, last_point.1, x, y
+                                );
+                                if let Some(style) = &style {
+                                    style.format_stroke();
+                                }
+                                print!(")\n");
+                                unclosed_point = None;
+                            }
+                        }
                         _ => todo!(),
                     }
                 }
@@ -649,14 +668,15 @@ fn convert(reader: &mut Reader<&[u8]>, transform: &Transform, font_scale: f64) -
 
 fn main() -> Result<()> {
     env_logger::init();
+    let args = Args::parse();
     let mut input = String::new();
     io::stdin().read_to_string(&mut input)?;
     let mut reader = Reader::from_str(&input);
     reader.config_mut().trim_text(true);
     convert(
         &mut reader,
-        &Transform::new(0.01, 0.0, 0.0, -0.01, 0.0, 0.0),
+        &Transform::new(args.scale, 0.0, 0.0, -args.scale, 0.0, 0.0),
         // &Transform::default(),
-        0.27,
+        args.font_scale,
     )
 }
