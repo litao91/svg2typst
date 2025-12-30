@@ -394,29 +394,25 @@ fn process_element(
                 let mut unclosed_point = None;
                 let mut last_point = (0.0, 0.0);
                 let mut merge_path = false;
-                let mut is_first_move_to = true;
                 for s in segments {
                     match s {
                         svgtypes::SimplePathSegment::MoveTo { x, y } => {
-                            if !is_first_move_to {
-                                println!("}})");
-                            } else {
-                                is_first_move_to = false;
-                            }
-                            if let Some(style) = &style
-                                && let Some(fill) = &style.fill
-                                && fill != "none"
-                            {
-                                merge_path = true;
-                                print!("merge-path(");
-                                style.format_fill();
-                                style.format_stroke();
-                                print!("{{\n");
-                            }
                             last_point = apply_transform((*x, *y), &parent.transform);
-                            unclosed_point.get_or_insert(last_point);
                         }
                         svgtypes::SimplePathSegment::LineTo { x, y } => {
+                            if unclosed_point.is_none() {
+                                if let Some(style) = &style
+                                    && let Some(fill) = &style.fill
+                                    && fill != "none"
+                                {
+                                    merge_path = true;
+                                    print!("merge-path(");
+                                    style.format_fill();
+                                    style.format_stroke();
+                                    print!("{{\n");
+                                }
+                                unclosed_point = Some(last_point);
+                            }
                             let (x, y) = apply_transform((*x, *y), &parent.transform);
                             print!(
                                 "line(({:.3}, {:.3}), ({:.3}, {:.3}),",
@@ -427,7 +423,6 @@ fn process_element(
                             }
                             print!(")\n");
                             last_point = (x, y);
-                            unclosed_point.get_or_insert(last_point);
                         }
                         svgtypes::SimplePathSegment::CurveTo {
                             x1,
@@ -437,6 +432,19 @@ fn process_element(
                             x,
                             y,
                         } => {
+                            if unclosed_point.is_none() {
+                                if let Some(style) = &style
+                                    && let Some(fill) = &style.fill
+                                    && fill != "none"
+                                {
+                                    merge_path = true;
+                                    print!("merge-path(");
+                                    style.format_fill();
+                                    style.format_stroke();
+                                    print!("{{\n");
+                                }
+                                unclosed_point = Some(last_point);
+                            }
                             let (x1, y1) = apply_transform((*x1, *y1), &parent.transform);
                             let (x2, y2) = apply_transform((*x2, *y2), &parent.transform);
                             let (x, y) = apply_transform((*x, *y), &parent.transform);
@@ -449,7 +457,6 @@ fn process_element(
                             }
                             print!(")\n");
                             last_point = (x, y);
-                            unclosed_point.get_or_insert(last_point);
                         }
                         svgtypes::SimplePathSegment::ClosePath => {
                             if let Some((x, y)) = unclosed_point {
@@ -462,6 +469,10 @@ fn process_element(
                                 }
                                 print!(")\n");
                                 unclosed_point = None;
+                            }
+                            if merge_path {
+                                println!("}})");
+                                merge_path = false;
                             }
                         }
                         _ => todo!(),
