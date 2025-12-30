@@ -394,6 +394,18 @@ fn process_element(
                 let mut unclosed_point = None;
                 let mut last_point = (0.0, 0.0);
                 let mut merge_path = false;
+                let mut compound_path = false;
+
+                if let Some(style) = &style
+                    && let Some(fill) = &style.fill
+                    && fill != "none"
+                {
+                    compound_path = true;
+                    print!("compound-path(");
+                    style.format_fill();
+                    style.format_stroke();
+                    print!("{{\n");
+                }
                 for s in segments {
                     match s {
                         svgtypes::SimplePathSegment::MoveTo { x, y } => {
@@ -479,6 +491,9 @@ fn process_element(
                     }
                 }
                 if merge_path {
+                    println!("}})");
+                }
+                if compound_path {
                     println!("}})");
                 }
             }
