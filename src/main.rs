@@ -1,4 +1,4 @@
-use log::{debug, error};
+use log::debug;
 use std::{
     io::{self, Read},
     str::FromStr,
@@ -18,8 +18,11 @@ struct Args {
     #[arg(short, long, default_value_t = 0.01)]
     scale: f64,
 
-    #[arg(short, long, default_value_t = 0.27)]
+    #[arg(short, long, default_value_t = 25.0)]
     font_scale: f64,
+
+    #[arg(long, default_value_t = 0.1)]
+    px_scale: f64,
 }
 
 fn transform_multiply(ts1: &Transform, ts2: &Transform) -> Transform {
@@ -74,6 +77,14 @@ impl SvgStyle {
     }
 }
 
+fn parse_size(size_str: &str, scale: f64) -> Result<f64> {
+    if size_str.ends_with("px") {
+        return Ok(f64::from_str(&size_str[..size_str.len() - 2])? * scale);
+    } else {
+        return Ok(f64::from_str(&size_str)? * scale);
+    }
+}
+
 impl FromStr for SvgStyle {
     type Err = anyhow::Error;
 
@@ -95,11 +106,7 @@ impl FromStr for SvgStyle {
                 } else if key == "font-family" {
                     r.font_family = Some(value.to_string());
                 } else if key == "font-size" {
-                    if value.ends_with("px") {
-                        r.font_size = Some(f64::from_str(&value[..value.len() - 2])?);
-                    } else {
-                        r.font_size = Some(f64::from_str(&value)?);
-                    }
+                    r.font_size = Some(parse_size(&value, 1.0)?);
                 } else if key == "stroke-dasharray" {
                     r.dash_array = Some(value.to_string());
                 } else {
@@ -113,14 +120,48 @@ impl FromStr for SvgStyle {
     }
 }
 
-fn gen_content(pos: (f64, f64), style: &Option<SvgStyle>, text_content: &str, font_scale: f64) {
+impl SvgStyle {
+    fn from_str_with_scale(s: &str, font_scale: f64, px_scale: f64) -> anyhow::Result<Self> {
+        let mut r = SvgStyle::default();
+
+        for kv_str in s.split(';') {
+            let mut split = kv_str.split(':');
+            if let Some(key) = split.next()
+                && let Some(value) = split.next()
+            {
+                if key == "fill" {
+                    r.fill = Some(value.to_string());
+                } else if key == "fill-rule" {
+                    r.fill_rule = Some(value.to_string());
+                } else if key == "stroke-width" {
+                    r.stroke_width = Some(parse_size(value, px_scale)?);
+                } else if key == "stroke" {
+                    r.stroke = Some(value.to_string());
+                } else if key == "font-family" {
+                    r.font_family = Some(value.to_string());
+                } else if key == "font-size" {
+                    r.font_size = Some(parse_size(&value, font_scale)?);
+                } else if key == "stroke-dasharray" {
+                    r.dash_array = Some(value.to_string());
+                } else {
+                    debug!("Unprocessed style: {}", kv_str);
+                }
+            } else if !kv_str.is_empty() {
+                return Err(anyhow::anyhow!("unexpected format {}", kv_str));
+            }
+        }
+        Ok(r)
+    }
+}
+
+fn gen_content(pos: (f64, f64), style: &Option<SvgStyle>, text_content: &str) {
     let (x1, y1) = pos;
     print!("content(({:.3},{:.3}), ", x1, y1);
     print!("anchor: \"south-west\",");
     if let Some(style) = style {
         print!("text(");
         if let Some(font_size) = style.font_size {
-            print!("size: {:.3}pt, ", font_size * font_scale);
+            print!("size: {:.3}pt, ", font_size);
         }
         if let Some(font_family) = &style.font_family {
             print!(
@@ -161,6 +202,8 @@ fn process_element(
     element: &BytesStart,
     events_stack: &mut Vec<EventEntry>,
     reader: &mut Reader<&[u8]>,
+    font_scale: f64,
+    px_scale: f64,
 ) -> Result<()> {
     let parent = events_stack.last().unwrap();
     match element.name().as_ref() {
@@ -213,21 +256,17 @@ fn process_element(
                 let val_str = val_cow.as_ref();
                 match a.key.as_ref() {
                     b"x" => {
-                        x = if val_str.ends_with("px") {
-                            f64::from_str(&val_str[0..val_str.len() - 2])?
-                        } else {
-                            f64::from_str(val_str)?
-                        };
+                        x = parse_size(val_str, 1.0)?;
                     }
                     b"y" => {
-                        y = if val_str.ends_with("px") {
-                            f64::from_str(&val_str[0..val_str.len() - 2])?
-                        } else {
-                            f64::from_str(val_str)?
-                        };
+                        y = parse_size(val_str, 1.0)?;
                     }
                     b"style" => {
-                        style = Some(SvgStyle::from_str(val_str)?);
+                        style = Some(SvgStyle::from_str_with_scale(
+                            val_str,
+                            font_scale * parent.transform.a,
+                            px_scale * parent.transform.a,
+                        )?);
                     }
                     _ => debug!(
                         "Unprocessed attributes for <text> {}",
@@ -343,7 +382,11 @@ fn process_element(
                         height = f64::from_str(val_str)?;
                     }
                     b"style" => {
-                        style = SvgStyle::from_str(val_str)?;
+                        style = SvgStyle::from_str_with_scale(
+                            val_str,
+                            font_scale * parent.transform.a,
+                            px_scale * parent.transform.a,
+                        )?;
                     }
                     _ => debug!(
                         "Unprocessed attributes for <rect> {}",
@@ -374,7 +417,11 @@ fn process_element(
                         path_segments = Some(segments);
                     }
                     b"style" => {
-                        style = Some(SvgStyle::from_str(val_str.as_ref())?);
+                        style = Some(SvgStyle::from_str_with_scale(
+                            val_str.as_ref(),
+                            font_scale * parent.transform.a,
+                            px_scale * parent.transform.a,
+                        )?);
                     }
                     b"fill" => {
                         let style = style.get_or_insert_default();
@@ -522,7 +569,11 @@ fn process_element(
                         ry = f64::from_str(val_str)?;
                     }
                     b"style" => {
-                        style = Some(SvgStyle::from_str(val_str)?);
+                        style = Some(SvgStyle::from_str_with_scale(
+                            val_str,
+                            font_scale * parent.transform.a,
+                            px_scale * parent.transform.a,
+                        )?);
                     }
                     _ => debug!(
                         "Unprocessed attributes for <rect> {}",
@@ -566,7 +617,11 @@ fn process_element(
                         r = f64::from_str(val_str)?;
                     }
                     b"style" => {
-                        style = Some(SvgStyle::from_str(val_str)?);
+                        style = Some(SvgStyle::from_str_with_scale(
+                            val_str,
+                            font_scale * parent.transform.a,
+                            px_scale * parent.transform.a,
+                        )?);
                     }
                     _ => debug!(
                         "Unprocessed attributes for <rect> {}",
@@ -598,6 +653,7 @@ fn handle_event(
     reader: &mut Reader<&[u8]>,
     root_transform: &Transform,
     font_scale: f64,
+    px_scale: f64,
 ) -> Result<()> {
     let mut events_stack = vec![EventEntry {
         name: Vec::from(b"root"),
@@ -616,7 +672,7 @@ fn handle_event(
                 events_stack.pop_if(|item| &item.name == element.name().as_ref());
             }
             Event::Start(element) => {
-                process_element(&element, &mut events_stack, reader)?;
+                process_element(&element, &mut events_stack, reader, font_scale, px_scale)?;
             }
             Event::Text(text_content) => {
                 if let Some(parent) = events_stack
@@ -635,7 +691,6 @@ fn handle_event(
                                 ),
                                 &parent.style,
                                 str::from_utf8(text_content.as_ref())?,
-                                font_scale,
                             );
                         }
                         if parent.name == b"tspan" {
@@ -652,7 +707,6 @@ fn handle_event(
                                         ),
                                         &parent.style,
                                         str::from_utf8(&[*ch])?,
-                                        font_scale,
                                     );
                                 }
                             } else {
@@ -663,7 +717,6 @@ fn handle_event(
                                     ),
                                     &parent.style,
                                     str::from_utf8(text_content.as_ref())?,
-                                    font_scale,
                                 );
                             }
                         }
@@ -678,7 +731,7 @@ fn handle_event(
                 }
             }
             Event::Empty(element) => {
-                process_element(&element, &mut events_stack, reader)?;
+                process_element(&element, &mut events_stack, reader, font_scale, px_scale)?;
             }
             _ => {
                 debug!("Unhandled event: {:?}", event);
@@ -688,8 +741,13 @@ fn handle_event(
     Ok(())
 }
 
-fn convert(reader: &mut Reader<&[u8]>, transform: &Transform, font_scale: f64) -> Result<()> {
-    handle_event(reader, transform, font_scale)
+fn convert(
+    reader: &mut Reader<&[u8]>,
+    transform: &Transform,
+    font_scale: f64,
+    px_scale: f64,
+) -> Result<()> {
+    handle_event(reader, transform, font_scale, px_scale)
 }
 
 fn main() -> Result<()> {
@@ -704,5 +762,6 @@ fn main() -> Result<()> {
         &Transform::new(args.scale, 0.0, 0.0, -args.scale, 0.0, 0.0),
         // &Transform::default(),
         args.font_scale,
+        args.px_scale,
     )
 }
