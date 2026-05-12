@@ -15,13 +15,13 @@ use svgtypes::{SimplifyingPathParser, Transform};
 #[derive(Parser, Debug)]
 #[command(version, about, long_about = None)]
 struct Args {
-    #[arg(short, long, default_value_t = 0.01)]
+    #[arg(short, long, default_value_t = 0.003)]
     scale: f64,
 
     #[arg(short, long, default_value_t = 25.0)]
     font_scale: f64,
 
-    #[arg(long, default_value_t = 0.1)]
+    #[arg(long, default_value_t = 30.0)]
     px_scale: f64,
 }
 
@@ -65,7 +65,10 @@ impl SvgStyle {
                 print!("paint: {}, ", stroke);
             }
             if let Some(thickness) = self.stroke_width {
-                print!("thickness: {}pt,", thickness);
+                print!(
+                    "thickness: {}pt,",
+                    if thickness > 0.0 { thickness } else { 0.6 }
+                );
             }
             if self.dash_array.is_some() {
                 print!("dash: \"dashed\",")
@@ -85,6 +88,14 @@ fn parse_size(size_str: &str, scale: f64) -> Result<f64> {
     }
 }
 
+fn parse_color(val_str: &str) -> String {
+    if val_str.starts_with("#") {
+        return format!("rgb(\"{}\")", val_str);
+    } else {
+        return val_str.to_string();
+    }
+}
+
 impl FromStr for SvgStyle {
     type Err = anyhow::Error;
 
@@ -96,13 +107,13 @@ impl FromStr for SvgStyle {
                 && let Some(value) = split.next()
             {
                 if key == "fill" {
-                    r.fill = Some(value.to_string());
+                    r.fill = Some(parse_color(value));
                 } else if key == "fill-rule" {
                     r.fill_rule = Some(value.to_string());
                 } else if key == "stroke-width" {
                     r.stroke_width = Some(f64::from_str(&value[..value.len() - 2])?);
                 } else if key == "stroke" {
-                    r.stroke = Some(value.to_string());
+                    r.stroke = Some(parse_color(value));
                 } else if key == "font-family" {
                     r.font_family = Some(value.to_string());
                 } else if key == "font-size" {
@@ -130,13 +141,13 @@ impl SvgStyle {
                 && let Some(value) = split.next()
             {
                 if key == "fill" {
-                    r.fill = Some(value.to_string());
+                    r.fill = Some(parse_color(value));
                 } else if key == "fill-rule" {
                     r.fill_rule = Some(value.to_string());
                 } else if key == "stroke-width" {
                     r.stroke_width = Some(parse_size(value, px_scale)?);
                 } else if key == "stroke" {
-                    r.stroke = Some(value.to_string());
+                    r.stroke = Some(parse_color(value));
                 } else if key == "font-family" {
                     r.font_family = Some(value.to_string());
                 } else if key == "font-size" {
@@ -425,11 +436,7 @@ fn process_element(
                     }
                     b"fill" => {
                         let style = style.get_or_insert_default();
-                        if val_str.starts_with("#") {
-                            style.fill = Some(format!("rgb(\"{}\")", val_str));
-                        } else {
-                            style.fill = Some(val_str.to_string());
-                        }
+                        style.fill = Some(parse_color(&val_str));
                     }
                     _ => {
                         debug!("unprocessed attr {:?}", a);
