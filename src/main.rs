@@ -224,7 +224,7 @@ fn process_element(
                 let mut cur_transform = events_stack.last().unwrap().transform.clone();
                 match a.key.as_ref() {
                     b"transform" => {
-                        let transform_str = a.decode_and_unescape_value(reader.decoder())?;
+                        let transform_str = a.decoded_and_normalized_value(quick_xml::XmlVersion::Implicit1_0, reader.decoder())?;
                         debug!("transform_str: {}", transform_str);
                         cur_transform = transform_multiply(
                             &cur_transform,
@@ -263,7 +263,7 @@ fn process_element(
             let mut style = None;
             for attr in element.attributes() {
                 let a = attr?;
-                let val_cow = a.decode_and_unescape_value(reader.decoder())?;
+                let val_cow = a.decoded_and_normalized_value(quick_xml::XmlVersion::Implicit1_0, reader.decoder())?;
                 let val_str = val_cow.as_ref();
                 match a.key.as_ref() {
                     b"x" => {
@@ -319,7 +319,8 @@ fn process_element(
             let mut y = Vec::<f64>::new();
             for attr in element.attributes() {
                 let a = attr?;
-                let val_cow = a.decode_and_unescape_value(reader.decoder())?;
+
+                let val_cow =a.decoded_and_normalized_value(quick_xml::XmlVersion::Implicit1_0, reader.decoder())?;
                 let val_str = val_cow.as_ref();
                 match a.key.as_ref() {
                     b"x" => {
@@ -377,7 +378,7 @@ fn process_element(
             let mut style = Default::default();
             for attr in element.attributes() {
                 let a = attr?;
-                let val_cow = a.decode_and_unescape_value(reader.decoder())?;
+                let val_cow = a.decoded_and_normalized_value(quick_xml::XmlVersion::Implicit1_0, reader.decoder())?;
                 let val_str = val_cow.as_ref();
                 match a.key.as_ref() {
                     b"x" => {
@@ -417,7 +418,7 @@ fn process_element(
             let mut style = None;
             for attr in element.attributes() {
                 let a = attr?;
-                let val_str = a.decode_and_unescape_value(reader.decoder())?;
+                let val_str = a.decoded_and_normalized_value(quick_xml::XmlVersion::Implicit1_0, reader.decoder())?;
                 match a.key.as_ref() {
                     b"d" => {
                         let mut segments = Vec::new();
@@ -560,7 +561,7 @@ fn process_element(
             let mut style = Default::default();
             for attr in element.attributes() {
                 let a = attr?;
-                let val_cow = a.decode_and_unescape_value(reader.decoder())?;
+                let val_cow = a.decoded_and_normalized_value(quick_xml::XmlVersion::Implicit1_0, reader.decoder())?;
                 let val_str = val_cow.as_ref();
                 match a.key.as_ref() {
                     b"cx" => {
@@ -611,7 +612,7 @@ fn process_element(
             let mut style = Default::default();
             for attr in element.attributes() {
                 let a = attr?;
-                let val_cow = a.decode_and_unescape_value(reader.decoder())?;
+                let val_cow = a.decoded_and_normalized_value(quick_xml::XmlVersion::Implicit1_0, reader.decoder())?;
                 let val_str = val_cow.as_ref();
                 match a.key.as_ref() {
                     b"cx" => {
