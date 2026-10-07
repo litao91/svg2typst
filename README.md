@@ -43,12 +43,15 @@ Coordinates are normalised against the SVG `viewBox` (its origin maps to
 
 - Shapes: `path` (incl. arcs, quadratics, multi-subpath fills/holes), `rect`,
   `circle`, `ellipse`, `line`, `polyline`, `polygon`
+- Reuse: `<use href="#id">` and `<symbol>` (with viewBox→width/height
+  scaling), including `x`/`y` offsets and transforms
 - Grouping/transforms: nested `<g>` and per-element `transform`
   (`translate`/`scale`/`rotate`/`matrix`/`skew`)
 - Styling: presentation attributes and `style=` (the latter wins), with
   inheritance — `fill`, `stroke`, `stroke-width`, `stroke-dasharray`,
   `stroke-linecap`, `stroke-linejoin`, `stroke-miterlimit`, `fill-rule`,
-  `opacity`, `fill-opacity`, `stroke-opacity`
+  `opacity`, `fill-opacity`, `stroke-opacity`. Element and group `opacity`
+  are folded into paint alpha, since CeTZ has no group opacity.
 - Colours: hex, `rgb()`, and the 148 named SVG colours; opacity is mapped to
   Typst colour alpha (`transparentize`)
 - Gradients: `linearGradient`/`radialGradient` with `objectBoundingBox` units
@@ -60,17 +63,21 @@ Coordinates are normalised against the SVG `viewBox` (its origin maps to
 
 - `userSpaceOnUse` gradients and `gradientTransform` fall back to a solid
   colour (a warning is printed)
-- `<use>`, `<image>`, filters, masks and patterns are not rendered
+- `<image>`, filters, masks, patterns and `clip-path` are not rendered
 - `dominant-baseline` is honoured only for `central`/`middle`
 
 ## Development
 
 ```sh
 cargo build --release
-cargo test          # unit tests + fixture conversion smoke test
+cargo test          # unit tests + fixture conversion + golden snapshots
 ./scripts/verify.sh # converts every fixture and compiles it with typst
 ```
 
 `scripts/verify.sh` is the regression gate: it requires `typst` on PATH with
 `@preview/cetz:0.5.2` cached, and fails if any fixture's output stops
 compiling. Fixtures live in `tests/fixtures/`.
+
+Golden CeTZ snapshots in `tests/snapshots/` pin the output format so
+regressions are caught even without typst; regenerate them with
+`scripts/gen-snapshots.sh` after an intentional format change.

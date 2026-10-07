@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="120" height="80" viewBox="0 0 120 80">
+  <defs>
+    <g id="box">
+      <rect x="0" y="0" width="20" height="20" fill="#3366cc"/>
+      <circle cx="10" cy="10" r="4" fill="#ffffff"/>
+    </g>
+    <symbol id="sym" viewBox="0 0 10 10">
+      <rect x="0" y="0" width="10" height="10" fill="#cc3366"/>
+    </symbol>
+  </defs>
+  <use href="#box" x="10" y="10"/>
+  <use href="#box" x="50" y="10" transform="rotate(15 60 20)"/>
+  <use href="#sym" x="90" y="10" width="20" height="20"/>
+  <g opacity="0.4">
+    <rect x="10" y="45" width="30" height="20" fill="#33aa33"/>
+  </g>
+  <text x="10 20 30 40" y="75 75 75 75" style="font-size:8px">abcd</text>
+</svg>

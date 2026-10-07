@@ -44,3 +44,22 @@ fn standalone_output_wraps_in_canvas() {
     assert!(stdout.contains("#cetz.canvas(length: 1cm, {"));
     assert!(stdout.contains("import cetz.draw: *"));
 }
+
+/// Golden snapshots pin the emitted CeTZ so output-format regressions are
+/// caught even without typst. Regenerate with `scripts/gen-snapshots.sh`
+/// after an intentional format change.
+#[test]
+fn snapshots_are_stable() {
+    let bin = env!("CARGO_BIN_EXE_svg2cetz");
+    for name in ["robot", "test2", "use_symbol"] {
+        let out = Command::new(bin)
+            .arg(format!("tests/fixtures/{name}.svg"))
+            .output()
+            .expect("failed to run svg2cetz");
+        let got = String::from_utf8_lossy(&out.stdout).into_owned();
+        let snap = format!("tests/snapshots/{name}.typ");
+        let want = fs::read_to_string(&snap)
+            .unwrap_or_else(|_| panic!("missing snapshot {snap}; run scripts/gen-snapshots.sh"));
+        assert_eq!(got, want, "snapshot mismatch for {name}");
+    }
+}
